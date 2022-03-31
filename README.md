@@ -13,3 +13,4 @@
 ## 图片
 ![1](https://github.com/kerisu/MAX30100/blob/master/image/1.jpg)
 ![2](https://github.com/kerisu/MAX30100/blob/master/image/2.jpg)
+![3](https://github.com/kerisu/MAX30100/blob/master/image/3.jpg)
