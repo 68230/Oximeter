@@ -17,6 +17,7 @@
 #define WAVE_LEN_X 		124
 #define WAVE_BUF_LEN  120
 #define WAVE_AVG_FIKN 30
+#define WAVE_AVG_SUMN 100
 
 #define HR_CALC_BN 7
 #define HR_CALC_CN 3
@@ -31,6 +32,7 @@ typedef struct
 {
 	float val[HR_CALC_BN];
 	float tick[HR_CALC_BN];
+	uint16_t index_src[HR_CALC_BN];
 	uint16_t index;
 }PeakPoint;
 
@@ -46,9 +48,27 @@ typedef struct
 
 typedef struct
 {
+	float irbuf[WAVE_AVG_SUMN];
+	uint16_t ircur;
+	float redbuf[WAVE_AVG_SUMN];
+	uint16_t redcur;
+
+	float irsum;
+	float redsum;
+	float irtop;
+	float irtf;
+	float redtop;
+	float cirdiff;
+
+}SpO2Typedef;
+
+
+typedef struct
+{
 	BufferTypedef source;
 	BufferTypedef wave;
 	TriggerCounter hrcnt;
+	SpO2Typedef	SpO2data;
 	
 	int HeartRate;
 	float SpO2;
@@ -56,7 +76,7 @@ typedef struct
 	uint8_t correct;
 	uint8_t update;
 	
-}BloodDataTypedef;//ÑªÒº²¨ÐÎÊý¾Ý
+}BloodDataTypedef;//ÑªÒºï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
 
 void blood_Setup(void);

@@ -1,10 +1,10 @@
 /**
   ******************************************************************************
   * @file    blood.c
-  * @author  ÕÅ¶«
+  * @author  ï¿½Å¶ï¿½
   * @version V1.0.0
   * @date    2019-12-28
-  * @brief   ÑªÑõÍ¼Ê¾ÒÇÖ÷³ÌĞò²¿·Ö
+  * @brief   Ñªï¿½ï¿½Í¼Ê¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ò²¿·ï¿½
   ******************************************************************************
   */
 /*--Include-start-------------------------------------------------------------*/
@@ -14,37 +14,34 @@
 #include "math.h"
 #include "gui.h"
 #include "stdio.h"
-#include "ST7735.h"
 #include "beep.h"
 /*Global data space ----------------------------------------------------------*/
 
 BloodDataTypedef g_bloData;
-
-
 /*funcation start ------------------------------------------------------------*/
 
 
 /*Sensor func -----------------------------------------------------------------*/
-//ÑªÒº¼ì²âĞÅÏ¢¸üĞÂ
+//è¡€æ¶²ä¿¡æ¯æ›´æ–°
 void blood_data_update(void)
 {
 	static DC_FilterData dc1 = {.w = 0,.init = 0,.a = 0.8};
 	static DC_FilterData dc2 = {.w = 0,.init = 0,.a = 0.8};
 	
 	static float data1buf[WAVE_AVG_FIKN];
-	static uint8_t data1cur = 0;
+	static uint16_t data1cur = 0;
 	static float data2buf[WAVE_AVG_FIKN];
-	static uint8_t data2cur = 0;
+	static uint16_t data2cur = 0;
 	
 	uint16_t temp_num=0;
 	uint16_t fifo_word_buff[1][2];
 
 	temp_num = max30100_Bus_Read(INTERRUPT_REG);
 	
-	//±êÖ¾Î»±»Ê¹ÄÜÊ± ¶ÁÈ¡FIFO
+	//ï¿½ï¿½Ö¾Î»ï¿½ï¿½Ê¹ï¿½ï¿½Ê± ï¿½ï¿½È¡FIFO
 	if (INTERRUPT_REG_A_FULL&temp_num)
 	{
-		//¶ÁÈ¡FIFO
+		//ï¿½ï¿½È¡FIFO
 		max30100_FIFO_Read(0x05,fifo_word_buff,1); //read the hr and spo2 data form fifo in reg=0x05
 		
 		float data1 = dc_filter(fifo_word_buff[0][0],&dc1)+100.0;
@@ -65,35 +62,58 @@ void blood_data_update(void)
 		data1 /= WAVE_AVG_FIKN;
 		data2 /= WAVE_AVG_FIKN;
 		
+		g_bloData.SpO2data.redbuf[g_bloData.SpO2data.redcur] = data1;
+		g_bloData.SpO2data.irbuf[g_bloData.SpO2data.ircur] = data2;
+
+		float data3_avg,data4_avg;
+		for(int i = 0;i < WAVE_AVG_SUMN;i++)
+		{
+				data3_avg += g_bloData.SpO2data.irbuf[i];
+				data4_avg += g_bloData.SpO2data.redbuf[i];
+		}
+		
+		data3_avg /= WAVE_AVG_SUMN;
+		data4_avg /= WAVE_AVG_SUMN;
+
 		data1cur = (data1cur < WAVE_AVG_FIKN - 1) ? data1cur + 1 : 0;
 		data2cur = (data2cur < WAVE_AVG_FIKN - 1) ? data2cur + 1 : 0;
-		
+		g_bloData.SpO2data.ircur  = (g_bloData.SpO2data.ircur  < WAVE_AVG_SUMN - 1) ?
+																g_bloData.SpO2data.ircur  + 1 : 0;
+		g_bloData.SpO2data.redcur = (g_bloData.SpO2data.redcur < WAVE_AVG_SUMN - 1) ?
+																g_bloData.SpO2data.redcur + 1 : 0;
+
+		g_bloData.SpO2data.irsum  = data3_avg + 50;
+		g_bloData.SpO2data.redsum = data4_avg + 50;
 		g_bloData.wave.buf[0][g_bloData.wave.index] = data1 + 50;
 		g_bloData.wave.buf[1][g_bloData.wave.index] = data2 + 50;
 		
 		g_bloData.wave.index = (g_bloData.wave.index + 1) % WAVE_BUF_LEN;
 		
-		//ĞÅÏ¢¸üĞÂ±êÖ¾Î»
 		g_bloData.update++;
 		
 	}
 }
-//ÑªÒºĞÅÏ¢¸üĞÂ
+
+
+//è¡€æ¶²ä¿¡æ¯è®¡ç®—
 void blood_data_Calculator(void)
 {
 	static int lastHeartRate = 0;
 	float * pbloBuf = g_bloData.wave.buf[0];
 	uint16_t pbloInx = g_bloData.wave.index;
 	
-	if(g_bloData.wave.index > 3)
+	if(g_bloData.wave.index > 3 && g_bloData.update > 0)
 	{
+		g_bloData.update--;
 		//find top
 		if(pbloBuf[pbloInx - 3] < pbloBuf[pbloInx - 2] &&
 			 pbloBuf[pbloInx - 1] < pbloBuf[pbloInx - 2])
 		{
 			g_bloData.hrcnt.top.tick[g_bloData.hrcnt.top.index] = HAL_GetTick();
 			g_bloData.hrcnt.top.val[g_bloData.hrcnt.top.index ] = pbloBuf[pbloInx - 2];
+			g_bloData.hrcnt.top.index_src[g_bloData.hrcnt.top.index] = pbloInx - 2;
 			g_bloData.hrcnt.top.index = (g_bloData.hrcnt.top.index + 1) % HR_CALC_BN;
+
 		}		
 		
 		//find bottom
@@ -102,6 +122,7 @@ void blood_data_Calculator(void)
 		{
 			g_bloData.hrcnt.btm.tick[g_bloData.hrcnt.btm.index] = HAL_GetTick();
 			g_bloData.hrcnt.btm.val[g_bloData.hrcnt.btm.index ] = pbloBuf[pbloInx - 2];
+			g_bloData.hrcnt.btm.index_src[g_bloData.hrcnt.btm.index] = pbloInx - 2;
 			g_bloData.hrcnt.btm.index = (g_bloData.hrcnt.btm.index + 1) % HR_CALC_BN;
 		}	
 		//delete error
@@ -119,7 +140,7 @@ void blood_data_Calculator(void)
 			uint32_t x1,x2,ucnt = 0;
 			float maxerror = 0;
 			
-			//¼ÆËãÊ±²îºÍ¾ù²î
+			//find Vtop
 			for(int i = 0;i < HR_CALC_BN;i++)
 			{
 				x1 = g_bloData.hrcnt.top.tick[i];
@@ -133,7 +154,7 @@ void blood_data_Calculator(void)
 			ucnt /= HR_CALC_CN;
 			g_bloData.hrcnt.avgcnt = ucnt;
 			
-			//¼ÆËãÀëÉ¢³Ì¶È
+			//find Vbottom
 			g_bloData.hrcnt.cnterror = 0;
 			for(int i = 0;i < HR_CALC_CN;i++)
 			{
@@ -146,7 +167,7 @@ void blood_data_Calculator(void)
 					g_bloData.hrcnt.cnterror = cntdiff;
 				}
 			}
-			//¼ÆËã·ùÖµ
+			//Calc Vpp
 			float vpp = 0;
 
 			for(int i = 0; i < HR_CALC_BN;i++)
@@ -159,17 +180,39 @@ void blood_data_Calculator(void)
 			vpp /= 6;
 			g_bloData.hrcnt.avgvpp = vpp;
 			
-			//ĞÄÂÊÕıÈ·ĞÔ¼ì²â Ñù±¾ÀëÉ¢³Ì¶È ºÍ ²¨ĞÎÓĞĞ§Õñ·ù
+			//check error and vpp value
 			if((g_bloData.hrcnt.cnterror < 200) && (HR_CALC_MINVPP < vpp))
 			{
+				// heart rate
 				g_bloData.correct = 1;
 				g_bloData.HeartRate = 60 * 1000 / ucnt ;
 				lastHeartRate = g_bloData.HeartRate;
+
+				//SpO2
+				//float irtop = 0,redtop = 0;
+				g_bloData.SpO2data.irtop = 0;
+				g_bloData.SpO2data.redtop = 0;
+				for(int i = 0;i < 3;i++)
+				{
+					uint16_t ind = g_bloData.hrcnt.top.index_src[i];
+					g_bloData.SpO2data.redtop  += g_bloData.wave.buf[0][ind];
+					g_bloData.SpO2data.irtop  += g_bloData.wave.buf[1][ind];
+				}
+				g_bloData.SpO2data.irtop /= 3;
+				g_bloData.SpO2data.redtop  /= 3;
+				g_bloData.SpO2data.cirdiff = (g_bloData.SpO2data.redsum - g_bloData.SpO2data.irsum);
+				g_bloData.SpO2data.irtf = g_bloData.SpO2data.irtop + g_bloData.SpO2data.cirdiff;
+
+				if(g_bloData.SpO2data.redtop > g_bloData.SpO2data.irtf)
+				{
+					g_bloData.SpO2 = 100 * log(g_bloData.SpO2data.redtop) /  log(g_bloData.SpO2data.irtf);
+				}
 			}
 			else
 			{
 				if((HR_CALC_MINVPP < vpp))
 				{
+					g_bloData.SpO2 = 0;
 					g_bloData.correct = 0;
 					g_bloData.HeartRate = 0;
 					g_bloData.SpO2 = 0;
@@ -180,7 +223,7 @@ void blood_data_Calculator(void)
 }
 
 /*tft display ---------------------------------------------------------------*/
-//»æÖÆ²¨ĞÎÍ¼±í
+//ï¿½ï¿½ï¿½Æ²ï¿½ï¿½ï¿½Í¼ï¿½ï¿½
 void tft_draw_wave(void)
 {
 	uint16_t ulineHigh = g_bloData.wave.buf[0][g_bloData.wave.index - 1] / 10;
@@ -188,68 +231,68 @@ void tft_draw_wave(void)
 	uint16_t ux_n = WAVE_START_X + g_bloData.wave.index;
 	uint16_t uy_n = WAVE_BOTTOM_Y - ulineHigh;
 	
-	//²Á³ıÏß
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	Gui_DrawLine(ux_n,WAVE_BOTTOM_Y - WAVE_MAX_H,ux_n,WAVE_BOTTOM_Y,BLACK);
 	Gui_DrawLine(ux_n + 1,WAVE_BOTTOM_Y - WAVE_MAX_H,ux_n + 1,WAVE_BOTTOM_Y,WHITE);
-	//»æÖÆÏß
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	Gui_DrawLine(ux_n,uy_n,ux_n,WAVE_BOTTOM_Y,WHITE);
 	
 }
 
-//ĞÄÂÊÑªÑõÊı¾İË¢ĞÂ
+//ï¿½ï¿½ï¿½ï¿½Ñªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë¢ï¿½ï¿½
 void tft_draw_hrsp(void)
 {
 	uint8_t str[50];
 	
-	//ĞÄÂÊĞÅÏ¢ÏÔÊ¾
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½Ê¾
 	sprintf((char *)str,"HR:%3d  ",g_bloData.HeartRate);
 	Gui_DrawFont_GBK16(X_HR_TEXT,Y_HR_TEXT,0xffe0,0,str);
-	//ÑªÑõ±¥ºÍ¶ÈÏÔÊ¾
+	//Ñªï¿½ï¿½ï¿½ï¿½ï¿½Í¶ï¿½ï¿½ï¿½Ê¾
 	g_bloData.SpO2 = (g_bloData.SpO2 > 99.99) ? 99.99:g_bloData.SpO2;
 	sprintf((char *)str,"SP:%2.2f%%  ",g_bloData.SpO2);
 	Gui_DrawFont_GBK16(X_SPO2_TEXT,Y_SPO2_TEXT,0x07ff,0,str);
 }
 
 
-//ÏÔÊ¾´°¿Ú»æÖÆ
+//ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½Ú»ï¿½ï¿½ï¿½
 void tft_draw_windows(void)
 {
-	//»æÖÆ´°¿Ú±ßÏß
+	//ï¿½ï¿½ï¿½Æ´ï¿½ï¿½Ú±ï¿½ï¿½ï¿½
 	gui_draw_square(0,1,127,63,WHITE);
 	gui_draw_square(WAVE_START_X - 2,WAVE_TOP_Y,WAVE_LEN_X + 1,WAVE_BOTTOM_Y + 1,WHITE);
 }
 
-//tftÏÔÊ¾Ë¢ĞÂ
+//tftï¿½ï¿½Ê¾Ë¢ï¿½ï¿½
 void tft_display_update(void)
 {
-	//»æÖÆ²¨ĞÎ
+	//ï¿½ï¿½ï¿½Æ²ï¿½ï¿½ï¿½
 	tft_draw_wave();
-	//ĞÄÂÊÑªÑõÊı¾İË¢ĞÂ
+	//ï¿½ï¿½ï¿½ï¿½Ñªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë¢ï¿½ï¿½
 	tft_draw_hrsp();
 }
 /*Setup and loop func -----------------------------------------------------*/
 
 void blood_Setup(void)
 {
-	//»æÖÆ´°¿Ú
+	//ï¿½ï¿½ï¿½Æ´ï¿½ï¿½ï¿½
 	tft_draw_windows();
 	
-	//³õÊ¼»¯Ö¸Ê¾µÆºÍ·äÃùÆ÷
+	//ï¿½ï¿½Ê¼ï¿½ï¿½Ö¸Ê¾ï¿½ÆºÍ·ï¿½ï¿½ï¿½ï¿½ï¿½
 	settone(14);
 }
 
 void blood_Loop(void)
 {
-	//ÑªÒºĞÅÏ¢»ñÈ¡
+	//ÑªÒºï¿½ï¿½Ï¢ï¿½ï¿½È¡
 	blood_data_update();
-	//ÑªÒºĞÅÏ¢¸üĞÂ
+	//ÑªÒºï¿½ï¿½Ï¢ï¿½ï¿½ï¿½ï¿½
 	blood_data_Calculator();
 	
 	
-	//tftÏÔÊ¾Ë¢ĞÂ
+	//tftï¿½ï¿½Ê¾Ë¢ï¿½ï¿½
 	tft_display_update();
 	
-	//ÏÔÊ¾Ë¢ĞÂ
+	//ï¿½ï¿½Ê¾Ë¢ï¿½ï¿½
 	OLED_FrameBufferRefresh();
 	
 }
@@ -262,7 +305,7 @@ void blood_Interrupt(void)
 	if(div > 10)
 	{
 		div = 0;
-		//¸üĞÂÑªÒºĞÅÏ¢
+		//ï¿½ï¿½ï¿½ï¿½ÑªÒºï¿½ï¿½Ï¢
 		//blood_data_update();
 	}
 	
@@ -270,7 +313,7 @@ void blood_Interrupt(void)
 	if(div > 50)
 	{
 		div2 = 0;
-		//tftÏÔÊ¾Ë¢ĞÂ
+		//tftï¿½ï¿½Ê¾Ë¢ï¿½ï¿½
 		//tft_display_update();
 	}
 }
